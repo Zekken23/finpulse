@@ -40,8 +40,9 @@ export const fetchCloudStore = async (): Promise<CloudAppData> => {
 
     if (res.ok) {
       const data = await res.json();
-      if (data && Array.isArray(data.users)) {
-        return data as CloudAppData;
+      const actualData = data.record || data;
+      if (actualData && Array.isArray(actualData.users)) {
+        return actualData as CloudAppData;
       }
     }
   } catch (error) {

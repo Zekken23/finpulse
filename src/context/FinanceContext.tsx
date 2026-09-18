@@ -34,6 +34,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [isBackendConnected, setIsBackendConnected] = useState<boolean>(false);
+  const [isDataLoaded, setIsDataLoaded] = useState<boolean>(false);
 
   const [timeFilter, setTimeFilter] = useState<TimeFilterOption>('this_month');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -43,15 +44,24 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const txKey = user ? `finpulse_tx_${user.id}` : 'finpulse_tx_guest';
   const goalsKey = user ? `finpulse_goals_${user.id}` : 'finpulse_goals_guest';
 
-  // Load user data on change of active user (Checks Local + Cloud Sync)
+  // Load user data on change of active user (Checks Local + Cloud Sync safely)
   useEffect(() => {
     if (!user) {
       setTransactions([]);
       setSavingsGoals([]);
+      setIsDataLoaded(false);
       return;
     }
 
+    let isMounted = true;
+
     const fetchUserData = async () => {
+      setIsDataLoaded(false);
+
+      let loadedTx: Transaction[] = [];
+      let loadedGoals: SavingsGoal[] = [];
+      let backendSuccess = false;
+
       // 1. Try Backend API first if active
       try {
         const [txRes, goalsRes] = await Promise.all([
@@ -60,51 +70,69 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         ]);
 
         if (txRes.ok && goalsRes.ok) {
-          const txData = await txRes.json();
-          const goalsData = await goalsRes.json();
-          setTransactions(txData);
-          setSavingsGoals(goalsData);
-          setIsBackendConnected(true);
-          return;
+          loadedTx = await txRes.json();
+          loadedGoals = await goalsRes.json();
+          backendSuccess = true;
         }
       } catch (error) {
-        setIsBackendConnected(false);
+        backendSuccess = false;
       }
 
-      // 2. Fetch from Cloud Sync (Cross-Device HP <-> Laptop Data Sync)
-      try {
-        const cloudData = await cloudFetchUserData(user.id);
-        if (cloudData && (cloudData.transactions.length > 0 || cloudData.savingsGoals.length > 0)) {
-          setTransactions(cloudData.transactions);
-          setSavingsGoals(cloudData.savingsGoals);
-          localStorage.setItem(txKey, JSON.stringify(cloudData.transactions));
-          localStorage.setItem(goalsKey, JSON.stringify(cloudData.savingsGoals));
-          return;
-        }
-      } catch (e) {
-        console.warn('Cloud Data sync read warning:', e);
+      if (backendSuccess && isMounted) {
+        setTransactions(loadedTx);
+        setSavingsGoals(loadedGoals);
+        setIsBackendConnected(true);
+        setIsDataLoaded(true);
+        return;
       }
 
-      // 3. Fallback to LocalStorage
+      setIsBackendConnected(false);
+
+      // 2. Read from LocalStorage first (instant & reliable)
       const savedTx = localStorage.getItem(txKey);
       const savedGoals = localStorage.getItem(goalsKey);
 
-      setTransactions(savedTx ? JSON.parse(savedTx) : []);
-      setSavingsGoals(savedGoals ? JSON.parse(savedGoals) : []);
+      let localTx: Transaction[] = savedTx ? JSON.parse(savedTx) : [];
+      let localGoals: SavingsGoal[] = savedGoals ? JSON.parse(savedGoals) : [];
+
+      // 3. Fallback to Cloud Sync if LocalStorage is empty
+      if (localTx.length === 0 && localGoals.length === 0) {
+        try {
+          const cloudData = await cloudFetchUserData(user.id);
+          if (cloudData) {
+            localTx = cloudData.transactions || [];
+            localGoals = cloudData.savingsGoals || [];
+          }
+        } catch (e) {
+          console.warn('Cloud Data sync read warning:', e);
+        }
+      }
+
+      if (isMounted) {
+        setTransactions(localTx);
+        setSavingsGoals(localGoals);
+        localStorage.setItem(txKey, JSON.stringify(localTx));
+        localStorage.setItem(goalsKey, JSON.stringify(localGoals));
+        setIsDataLoaded(true);
+      }
     };
 
     fetchUserData();
-  }, [user, txKey, goalsKey]);
 
-  // Sync to LocalStorage & Cloud Store
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id, txKey, goalsKey]);
+
+  // Sync to LocalStorage & Cloud Store (ONLY AFTER initial data fetch has completed!)
   useEffect(() => {
-    if (user) {
+    if (user && isDataLoaded) {
       localStorage.setItem(txKey, JSON.stringify(transactions));
       localStorage.setItem(goalsKey, JSON.stringify(savingsGoals));
       // Cross-device Cloud Sync
       cloudSaveUserData(user.id, transactions, savingsGoals);
     }
-  }, [transactions, savingsGoals, user, txKey, goalsKey]);
+  }, [transactions, savingsGoals, user?.id, txKey, goalsKey, isDataLoaded]);
 
   // Derived Financial Stats
   const stats = calculateFinancialStats(transactions, savingsGoals, timeFilter);
