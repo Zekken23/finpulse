@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { X, Target, Laptop, ShieldCheck, Palmtree, Car, Home, Smartphone, PiggyBank } from 'lucide-react';
+import { X, Target, Laptop, ShieldCheck, Palmtree, Car, Home, Smartphone, PiggyBank, CheckCircle2 } from 'lucide-react';
 import { useFinance } from '../../context/FinanceContext';
+import { useToast } from '../../context/ToastContext';
+import { formatNumberWithDots, parseDotsToNumber } from '../../utils/formatters';
 import type { SavingsGoal } from '../../types/finance';
 
 interface AddSavingsModalProps {
@@ -10,9 +12,10 @@ interface AddSavingsModalProps {
 
 export const AddSavingsModal: React.FC<AddSavingsModalProps> = ({ isOpen, onClose }) => {
   const { addSavingsGoal } = useFinance();
+  const { showToast } = useToast();
 
   const [title, setTitle] = useState('');
-  const [targetAmount, setTargetAmount] = useState('');
+  const [formattedTargetAmount, setFormattedTargetAmount] = useState('');
   const [targetDate, setTargetDate] = useState('');
   const [iconName, setIconName] = useState('PiggyBank');
   const [colorTheme, setColorTheme] = useState<SavingsGoal['colorTheme']>('purple');
@@ -20,28 +23,52 @@ export const AddSavingsModal: React.FC<AddSavingsModalProps> = ({ isOpen, onClos
 
   if (!isOpen) return null;
 
+  const handleTargetAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormattedTargetAmount(formatNumberWithDots(e.target.value));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const numTarget = parseFloat(targetAmount);
-    if (!title || !numTarget || numTarget <= 0 || !targetDate) return;
+    const numTarget = parseDotsToNumber(formattedTargetAmount);
 
-    addSavingsGoal({
-      title,
-      targetAmount: numTarget,
-      targetDate,
-      iconName,
-      colorTheme,
-      notes: notes || undefined
-    });
+    if (!title.trim()) {
+      showToast('❌ Mohon isi nama target tabungan terlebih dahulu.', 'error');
+      return;
+    }
 
-    // Reset & Close
-    setTitle('');
-    setTargetAmount('');
-    setTargetDate('');
-    setIconName('PiggyBank');
-    setColorTheme('purple');
-    setNotes('');
-    onClose();
+    if (!numTarget || numTarget <= 0) {
+      showToast('❌ Target nominal harus lebih besar dari Rp 0.', 'error');
+      return;
+    }
+
+    if (!targetDate) {
+      showToast('❌ Mohon pilih tenggat waktu pencapaian target.', 'error');
+      return;
+    }
+
+    try {
+      addSavingsGoal({
+        title: title.trim(),
+        targetAmount: numTarget,
+        targetDate,
+        iconName,
+        colorTheme,
+        notes: notes.trim() || undefined
+      });
+
+      showToast(`🎯 Target tabungan "${title}" berhasil dibuat!`, 'success');
+
+      // Reset & Close
+      setTitle('');
+      setFormattedTargetAmount('');
+      setTargetDate('');
+      setIconName('PiggyBank');
+      setColorTheme('purple');
+      setNotes('');
+      onClose();
+    } catch (err) {
+      showToast('❌ Gagal membuat target tabungan. Coba lagi.', 'error');
+    }
   };
 
   const iconsList = [
@@ -63,8 +90,8 @@ export const AddSavingsModal: React.FC<AddSavingsModalProps> = ({ isOpen, onClos
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
-      <div className="glass-panel w-full max-w-lg rounded-2xl border border-purple-500/30 p-6 relative shadow-neon-purple max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in sm:items-center items-end">
+      <div className="glass-panel w-full max-w-lg rounded-3xl sm:rounded-2xl border border-purple-500/30 p-6 relative shadow-neon-purple max-h-[90vh] overflow-y-auto">
         
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
@@ -98,7 +125,7 @@ export const AddSavingsModal: React.FC<AddSavingsModalProps> = ({ isOpen, onClos
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Contoh: Beli Laptop Baru / Dana Darurat"
-              className="w-full px-3 py-2.5 rounded-xl glass-input text-sm text-white"
+              className="w-full px-3.5 py-2.5 rounded-xl glass-input text-sm text-white"
             />
           </div>
 
@@ -107,15 +134,22 @@ export const AddSavingsModal: React.FC<AddSavingsModalProps> = ({ isOpen, onClos
               <label className="block text-xs font-semibold text-slate-300 mb-1">
                 Target Nominal (IDR) *
               </label>
-              <input
-                type="number"
-                required
-                min="10000"
-                value={targetAmount}
-                onChange={(e) => setTargetAmount(e.target.value)}
-                placeholder="10.000.000"
-                className="w-full px-3 py-2.5 rounded-xl glass-input text-sm text-white font-bold"
-              />
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                  Rp
+                </span>
+                <input
+                  type="text"
+                  required
+                  value={formattedTargetAmount}
+                  onChange={handleTargetAmountChange}
+                  placeholder="10.000.000"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl glass-input text-sm text-white font-bold tracking-wide"
+                />
+              </div>
+              <span className="text-[10px] text-slate-400 mt-1 block">
+                Format titik ribuan otomatis saat diketik.
+              </span>
             </div>
 
             <div>
@@ -127,7 +161,7 @@ export const AddSavingsModal: React.FC<AddSavingsModalProps> = ({ isOpen, onClos
                 required
                 value={targetDate}
                 onChange={(e) => setTargetDate(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl glass-input text-sm text-white"
+                className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs text-white"
               />
             </div>
           </div>
@@ -188,7 +222,7 @@ export const AddSavingsModal: React.FC<AddSavingsModalProps> = ({ isOpen, onClos
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Contoh: Tabungan khusus tiap minggu"
-              className="w-full px-3 py-2 rounded-xl glass-input text-xs text-white"
+              className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs text-white"
             />
           </div>
 
@@ -197,15 +231,16 @@ export const AddSavingsModal: React.FC<AddSavingsModalProps> = ({ isOpen, onClos
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold rounded-xl text-slate-400 hover:text-white"
+              className="px-4 py-2.5 text-xs font-semibold rounded-xl text-slate-400 hover:text-white"
             >
               Batal
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 text-xs font-bold rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-neon-purple active:scale-95 cursor-pointer"
+              className="px-5 py-2.5 text-xs font-bold rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-neon-purple active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
             >
-              + Simpan Target Tabungan
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Simpan Target Tabungan</span>
             </button>
           </div>
 

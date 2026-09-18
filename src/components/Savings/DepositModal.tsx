@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { X, PiggyBank, Sparkles } from 'lucide-react';
 import type { SavingsGoal } from '../../types/finance';
 import { useFinance } from '../../context/FinanceContext';
-import { formatIDR } from '../../utils/formatters';
+import { useToast } from '../../context/ToastContext';
+import { formatIDR, formatNumberWithDots, parseDotsToNumber } from '../../utils/formatters';
 
 interface DepositModalProps {
   goal: SavingsGoal | null;
@@ -11,29 +12,46 @@ interface DepositModalProps {
 
 export const DepositModal: React.FC<DepositModalProps> = ({ goal, onClose }) => {
   const { depositToSavingsGoal } = useFinance();
-  const [amount, setAmount] = useState<string>('');
+  const { showToast } = useToast();
+  const [formattedAmount, setFormattedAmount] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
 
   if (!goal) return null;
 
   const handleQuickAmount = (val: number) => {
-    setAmount(val.toString());
+    setFormattedAmount(formatNumberWithDots(val));
+  };
+
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormattedAmount(formatNumberWithDots(e.target.value));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const numAmount = parseFloat(amount);
-    if (!numAmount || numAmount <= 0) return;
+    const numAmount = parseDotsToNumber(formattedAmount);
 
-    depositToSavingsGoal(goal.id, numAmount, notes);
-    onClose();
+    if (!numAmount || numAmount <= 0) {
+      showToast('❌ Nominal setoran harus lebih besar dari Rp 0.', 'error');
+      return;
+    }
+
+    try {
+      depositToSavingsGoal(goal.id, numAmount, notes.trim() || undefined);
+      showToast(`🎉 Setoran Rp ${formatNumberWithDots(numAmount)} ke ${goal.title} berhasil!`, 'success');
+
+      setFormattedAmount('');
+      setNotes('');
+      onClose();
+    } catch (err) {
+      showToast('❌ Gagal melakukan setoran. Coba lagi.', 'error');
+    }
   };
 
   const remainingNeeded = Math.max(0, goal.targetAmount - goal.currentAmount);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
-      <div className="glass-panel w-full max-w-md rounded-2xl border border-cyan-500/30 p-6 relative shadow-neon-cyan overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in sm:items-center items-end">
+      <div className="glass-panel w-full max-w-md rounded-3xl sm:rounded-2xl border border-cyan-500/30 p-6 relative shadow-neon-cyan overflow-hidden max-h-[90vh] overflow-y-auto">
         
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
@@ -70,22 +88,24 @@ export const DepositModal: React.FC<DepositModalProps> = ({ goal, onClose }) => 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Nominal Setoran (IDR)
+              Nominal Setoran (IDR) *
             </label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-cyan-400">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-cyan-400">
                 Rp
               </span>
               <input
-                type="number"
+                type="text"
                 required
-                min="1000"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                value={formattedAmount}
+                onChange={handleAmountChange}
                 placeholder="100.000"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl glass-input text-base font-bold text-white"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl glass-input text-base font-bold text-white tracking-wide"
               />
             </div>
+            <span className="text-[10px] text-slate-400 mt-1 block">
+              Format titik ribuan otomatis saat diketik.
+            </span>
           </div>
 
           {/* Quick Amount Pills */}
@@ -99,9 +119,9 @@ export const DepositModal: React.FC<DepositModalProps> = ({ goal, onClose }) => 
                   key={val}
                   type="button"
                   onClick={() => handleQuickAmount(val)}
-                  className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-white/5 hover:bg-cyan-500/20 text-slate-300 hover:text-cyan-300 border border-white/10 hover:border-cyan-500/30 transition-all"
+                  className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-white/5 hover:bg-cyan-500/20 text-slate-300 hover:text-cyan-300 border border-white/10 hover:border-cyan-500/30 transition-all"
                 >
-                  +{formatIDR(val).replace('Rp', '')}
+                  +{formatNumberWithDots(val)}
                 </button>
               ))}
             </div>
@@ -116,16 +136,16 @@ export const DepositModal: React.FC<DepositModalProps> = ({ goal, onClose }) => 
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Contoh: Sisa fee freelance / hemat jajan"
-              className="w-full px-3 py-2 rounded-xl glass-input text-xs text-white"
+              className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs text-white"
             />
           </div>
 
           {/* Submit Action */}
-          <div className="pt-2 flex items-center justify-end gap-3">
+          <div className="pt-2 flex items-center justify-end gap-3 border-t border-white/10">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold rounded-xl text-slate-400 hover:text-white"
+              className="px-4 py-2.5 text-xs font-semibold rounded-xl text-slate-400 hover:text-white"
             >
               Batal
             </button>

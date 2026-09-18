@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { FinanceProvider } from './context/FinanceContext';
+import { ToastProvider } from './context/ToastContext';
 import { Header } from './components/Header';
 import { OverviewCards } from './components/OverviewCards';
 import { FinancialHealthGauge } from './components/FinancialHealthGauge';
@@ -12,6 +13,7 @@ import { TransactionModal } from './components/Transactions/TransactionModal';
 import { AddSavingsModal } from './components/Savings/AddSavingsModal';
 import { DepositModal } from './components/Savings/DepositModal';
 import { AuthModal } from './components/Auth/AuthModal';
+import { MobileBottomNav } from './components/MobileBottomNav';
 import type { SavingsGoal } from './types/finance';
 import { Wallet } from 'lucide-react';
 
@@ -22,7 +24,7 @@ const MainContent: React.FC = () => {
   const [selectedGoalForDeposit, setSelectedGoalForDeposit] = useState<SavingsGoal | null>(null);
 
   return (
-    <div className="min-h-screen flex flex-col justify-between">
+    <div className="min-h-screen flex flex-col justify-between pb-20 sm:pb-0">
       {!isAuthenticated && <AuthModal />}
 
       <div>
@@ -33,10 +35,12 @@ const MainContent: React.FC = () => {
         />
 
         {/* Main Dashboard Container */}
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8">
           
           {/* Top Stat Cards */}
-          <OverviewCards />
+          <div id="dashboard-overview">
+            <OverviewCards />
+          </div>
 
           {/* Financial Health Meter & AI Recommendation */}
           <FinancialHealthGauge />
@@ -58,12 +62,20 @@ const MainContent: React.FC = () => {
           </div>
 
           {/* Daily & Periodical Transactions Table */}
-          <TransactionListSection
-            onOpenAddModal={() => setIsAddTxModalOpen(true)}
-          />
+          <div id="transaction-history">
+            <TransactionListSection
+              onOpenAddModal={() => setIsAddTxModalOpen(true)}
+            />
+          </div>
 
         </main>
       </div>
+
+      {/* Mobile Fixed Bottom Navigation Bar */}
+      <MobileBottomNav
+        onOpenAddTx={() => setIsAddTxModalOpen(true)}
+        onOpenAddSavings={() => setIsAddSavingsModalOpen(true)}
+      />
 
       {/* Modals */}
       <TransactionModal
@@ -103,9 +115,11 @@ const MainContent: React.FC = () => {
 export function App() {
   return (
     <AuthProvider>
-      <FinanceProvider>
-        <MainContent />
-      </FinanceProvider>
+      <ToastProvider>
+        <FinanceProvider>
+          <MainContent />
+        </FinanceProvider>
+      </ToastProvider>
     </AuthProvider>
   );
 }

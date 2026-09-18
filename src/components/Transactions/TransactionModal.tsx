@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { X, ArrowDownCircle, ArrowUpCircle, PlusCircle } from 'lucide-react';
+import { X, ArrowDownCircle, ArrowUpCircle, PlusCircle, CheckCircle2 } from 'lucide-react';
 import { useFinance } from '../../context/FinanceContext';
+import { useToast } from '../../context/ToastContext';
+import { formatNumberWithDots, parseDotsToNumber } from '../../utils/formatters';
 import type { TransactionType, ExpenseCategory, IncomeCategory } from '../../types/finance';
 
 interface TransactionModalProps {
@@ -10,10 +12,11 @@ interface TransactionModalProps {
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose }) => {
   const { addTransaction } = useFinance();
+  const { showToast } = useToast();
 
   const [type, setType] = useState<TransactionType>('expense');
   const [title, setTitle] = useState('');
-  const [amount, setAmount] = useState('');
+  const [formattedAmount, setFormattedAmount] = useState('');
   const [category, setCategory] = useState<string>('Makanan & Minuman');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
@@ -49,31 +52,53 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
     }
   };
 
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputVal = e.target.value;
+    // Format input string into thousand-dot format real-time (e.g., 27000 -> 27.000)
+    const formatted = formatNumberWithDots(inputVal);
+    setFormattedAmount(formatted);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const numAmount = parseFloat(amount);
-    if (!title || !numAmount || numAmount <= 0 || !date) return;
+    const numAmount = parseDotsToNumber(formattedAmount);
 
-    addTransaction({
-      title,
-      amount: numAmount,
-      type,
-      category: category as any,
-      date,
-      notes: notes || undefined
-    });
+    if (!title.trim()) {
+      showToast('❌ Mohon isi judul transaksi terlebih dahulu.', 'error');
+      return;
+    }
 
-    // Reset & Close
-    setTitle('');
-    setAmount('');
-    setDate(new Date().toISOString().split('T')[0]);
-    setNotes('');
-    onClose();
+    if (!numAmount || numAmount <= 0) {
+      showToast('❌ Nominal transaksi harus lebih besar dari Rp 0.', 'error');
+      return;
+    }
+
+    try {
+      addTransaction({
+        title: title.trim(),
+        amount: numAmount,
+        type,
+        category: category as any,
+        date,
+        notes: notes.trim() || undefined
+      });
+
+      showToast(`✅ Transaksi "${title}" (${type === 'expense' ? 'Pengeluaran' : 'Pemasukan'}) berhasil disimpan!`, 'success');
+
+      // Reset & Close
+      setTitle('');
+      setFormattedAmount('');
+      setDate(new Date().toISOString().split('T')[0]);
+      setNotes('');
+      onClose();
+    } catch (err) {
+      showToast('❌ Gagal menyimpan transaksi. Coba lagi.', 'error');
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
-      <div className="glass-panel w-full max-w-md rounded-2xl border border-purple-500/30 p-6 relative shadow-neon-purple">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in sm:items-center items-end">
+      <div className="glass-panel w-full max-w-md rounded-3xl sm:rounded-2xl border border-purple-500/30 p-6 relative shadow-neon-purple max-h-[90vh] overflow-y-auto">
         
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
@@ -102,7 +127,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
             <button
               type="button"
               onClick={() => handleTypeChange('expense')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all ${
                 type === 'expense'
                   ? 'bg-rose-600 text-white shadow-neon-rose'
                   : 'text-slate-400 hover:text-white'
@@ -114,7 +139,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
             <button
               type="button"
               onClick={() => handleTypeChange('income')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-all ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold transition-all ${
                 type === 'income'
                   ? 'bg-emerald-600 text-white shadow-neon-emerald'
                   : 'text-slate-400 hover:text-white'
@@ -135,7 +160,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={type === 'expense' ? 'Contoh: Makan Siang / Pertalite Motor' : 'Contoh: Fee Project / Transfer Gaji'}
-              className="w-full px-3 py-2.5 rounded-xl glass-input text-sm text-white"
+              className="w-full px-3.5 py-2.5 rounded-xl glass-input text-sm text-white"
             />
           </div>
 
@@ -145,19 +170,21 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
                 Nominal (IDR) *
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
                   Rp
                 </span>
                 <input
-                  type="number"
+                  type="text"
                   required
-                  min="500"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="50.000"
-                  className="w-full pl-9 pr-3 py-2.5 rounded-xl glass-input text-sm font-bold text-white"
+                  value={formattedAmount}
+                  onChange={handleAmountChange}
+                  placeholder="27.000"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl glass-input text-sm font-bold text-white tracking-wide"
                 />
               </div>
+              <span className="text-[10px] text-slate-400 mt-1 block">
+                Format titik ribuan otomatis saat diketik.
+              </span>
             </div>
 
             <div>
@@ -169,7 +196,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
                 required
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl glass-input text-xs text-white"
+                className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs text-white"
               />
             </div>
           </div>
@@ -181,7 +208,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl glass-input text-xs text-white"
+              className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs text-white"
             >
               {type === 'expense'
                 ? expenseCategories.map(cat => (
@@ -203,7 +230,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Rincian item / struk belanja..."
-              className="w-full px-3 py-2 rounded-xl glass-input text-xs text-white"
+              className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs text-white"
             />
           </div>
 
@@ -212,19 +239,20 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onCl
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold rounded-xl text-slate-400 hover:text-white"
+              className="px-4 py-2.5 text-xs font-semibold rounded-xl text-slate-400 hover:text-white"
             >
               Batal
             </button>
             <button
               type="submit"
-              className={`px-5 py-2.5 text-xs font-bold rounded-xl text-white active:scale-95 transition-all cursor-pointer ${
+              className={`px-5 py-2.5 text-xs font-bold rounded-xl text-white active:scale-95 transition-all cursor-pointer flex items-center gap-1.5 ${
                 type === 'expense'
                   ? 'bg-rose-600 hover:bg-rose-500 shadow-neon-rose'
                   : 'bg-emerald-600 hover:bg-emerald-500 shadow-neon-emerald'
               }`}
             >
-              + Simpan Catatan
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Simpan Catatan</span>
             </button>
           </div>
 

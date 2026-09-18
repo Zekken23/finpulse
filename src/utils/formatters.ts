@@ -1,13 +1,28 @@
 import confetti from 'canvas-confetti';
 import type { Transaction, TimeFilterOption, FinancialStats, CategorySummary, SavingsGoal } from '../types/finance';
 
-// Format IDR Currency
+// Format IDR Currency (e.g. 27000 -> "Rp 27.000")
 export const formatIDR = (amount: number): string => {
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
     maximumFractionDigits: 0,
   }).format(amount);
+};
+
+// Format raw input string/number to dot-separated string (e.g. "27000" -> "27.000")
+export const formatNumberWithDots = (val: string | number): string => {
+  if (val === undefined || val === null || val === '') return '';
+  const cleanNum = val.toString().replace(/\D/g, ''); // keep numbers only
+  if (!cleanNum) return '';
+  return new Intl.NumberFormat('id-ID').format(parseInt(cleanNum, 10));
+};
+
+// Parse dot-separated string back to numeric number (e.g. "27.000" -> 27000)
+export const parseDotsToNumber = (val: string): number => {
+  if (!val) return 0;
+  const cleanNum = val.toString().replace(/\D/g, '');
+  return cleanNum ? parseInt(cleanNum, 10) : 0;
 };
 
 // Format Date string to readable Indonesian date
@@ -90,7 +105,6 @@ export const calculateFinancialStats = (
   savingsGoals: SavingsGoal[],
   period: TimeFilterOption
 ): FinancialStats => {
-  // All time income & expense for total balance
   const allIncome = transactions
     .filter(t => t.type === 'income')
     .reduce((sum, t) => sum + t.amount, 0);
@@ -100,11 +114,8 @@ export const calculateFinancialStats = (
     .reduce((sum, t) => sum + t.amount, 0);
 
   const totalSavedInGoals = savingsGoals.reduce((sum, g) => sum + g.currentAmount, 0);
-
-  // Total balance = (All Income - All Expense)
   const totalBalance = allIncome - allExpense;
 
-  // Filtered by selected period
   const periodTx = filterTransactionsByPeriod(transactions, period);
   const periodIncome = periodTx
     .filter(t => t.type === 'income')
@@ -116,12 +127,10 @@ export const calculateFinancialStats = (
 
   const netCashflow = periodIncome - periodExpense;
 
-  // Savings rate calculation
   const savingsRate = periodIncome > 0 
     ? Math.max(0, Math.min(100, Math.round(((periodIncome - periodExpense) / periodIncome) * 100)))
     : 0;
 
-  // Days in period for daily average expense
   let daysInPeriod = 30;
   if (period === 'today') daysInPeriod = 1;
   else if (period === 'this_week') daysInPeriod = 7;
@@ -130,7 +139,6 @@ export const calculateFinancialStats = (
 
   const dailyAverageExpense = Math.round(periodExpense / daysInPeriod);
 
-  // Calculate Health Score (0-100)
   let healthScore = 75;
   let healthStatus: FinancialStats['healthStatus'] = 'Healthy';
   let healthRecommendation = 'Keuangan Anda dalam kondisi cukup stabil.';
