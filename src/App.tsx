@@ -13,6 +13,7 @@ import { TransactionModal } from './components/Transactions/TransactionModal';
 import { AddSavingsModal } from './components/Savings/AddSavingsModal';
 import { DepositModal } from './components/Savings/DepositModal';
 import { AuthModal } from './components/Auth/AuthModal';
+import { ProfileModal } from './components/Auth/ProfileModal';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import type { SavingsGoal } from './types/finance';
 import { Wallet } from 'lucide-react';
@@ -21,6 +22,7 @@ const MainContent: React.FC = () => {
   const { isAuthenticated } = useAuth();
   const [isAddTxModalOpen, setIsAddTxModalOpen] = useState(false);
   const [isAddSavingsModalOpen, setIsAddSavingsModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [selectedGoalForDeposit, setSelectedGoalForDeposit] = useState<SavingsGoal | null>(null);
 
   return (
@@ -32,6 +34,7 @@ const MainContent: React.FC = () => {
         <Header
           onOpenAddModal={() => setIsAddTxModalOpen(true)}
           onOpenSavingsModal={() => setIsAddSavingsModalOpen(true)}
+          onOpenProfileModal={() => setIsProfileModalOpen(true)}
         />
 
         {/* Main Dashboard Container */}
@@ -91,6 +94,11 @@ const MainContent: React.FC = () => {
       <DepositModal
         goal={selectedGoalForDeposit}
         onClose={() => setSelectedGoalForDeposit(null)}
+      />
+
+      <ProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
       />
 
       {/* Footer */}

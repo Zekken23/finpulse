@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { Transaction, SavingsGoal, TimeFilterOption, FinancialStats } from '../types/finance';
 import { calculateFinancialStats, triggerConfetti } from '../utils/formatters';
 import { useAuth } from './AuthContext';
+import { cloudFetchUserData, cloudSaveUserData } from '../services/cloudSync';
 
 const API_BASE_URL = '/api';
 
@@ -42,7 +43,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const txKey = user ? `finpulse_tx_${user.id}` : 'finpulse_tx_guest';
   const goalsKey = user ? `finpulse_goals_${user.id}` : 'finpulse_goals_guest';
 
-  // Load user data on change of active user
+  // Load user data on change of active user (Checks Local + Cloud Sync)
   useEffect(() => {
     if (!user) {
       setTransactions([]);
@@ -51,7 +52,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     const fetchUserData = async () => {
-      // 1. Try Backend API first if user exists
+      // 1. Try Backend API first if active
       try {
         const [txRes, goalsRes] = await Promise.all([
           fetch(`${API_BASE_URL}/transactions?userId=${user.id}`),
@@ -70,7 +71,21 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setIsBackendConnected(false);
       }
 
-      // 2. Fallback to LocalStorage for this specific userId
+      // 2. Fetch from Cloud Sync (Cross-Device HP <-> Laptop Data Sync)
+      try {
+        const cloudData = await cloudFetchUserData(user.id);
+        if (cloudData && (cloudData.transactions.length > 0 || cloudData.savingsGoals.length > 0)) {
+          setTransactions(cloudData.transactions);
+          setSavingsGoals(cloudData.savingsGoals);
+          localStorage.setItem(txKey, JSON.stringify(cloudData.transactions));
+          localStorage.setItem(goalsKey, JSON.stringify(cloudData.savingsGoals));
+          return;
+        }
+      } catch (e) {
+        console.warn('Cloud Data sync read warning:', e);
+      }
+
+      // 3. Fallback to LocalStorage
       const savedTx = localStorage.getItem(txKey);
       const savedGoals = localStorage.getItem(goalsKey);
 
@@ -81,18 +96,15 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     fetchUserData();
   }, [user, txKey, goalsKey]);
 
-  // Sync to LocalStorage
+  // Sync to LocalStorage & Cloud Store
   useEffect(() => {
     if (user) {
       localStorage.setItem(txKey, JSON.stringify(transactions));
-    }
-  }, [transactions, user, txKey]);
-
-  useEffect(() => {
-    if (user) {
       localStorage.setItem(goalsKey, JSON.stringify(savingsGoals));
+      // Cross-device Cloud Sync
+      cloudSaveUserData(user.id, transactions, savingsGoals);
     }
-  }, [savingsGoals, user, goalsKey]);
+  }, [transactions, savingsGoals, user, txKey, goalsKey]);
 
   // Derived Financial Stats
   const stats = calculateFinancialStats(transactions, savingsGoals, timeFilter);
@@ -108,7 +120,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       userId: user.id
     };
 
-    // Optimistic UI update
     setTransactions(prev => [newTx, ...prev]);
 
     try {
@@ -122,7 +133,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setTransactions(prev => prev.map(t => t.id === tempId ? data : t));
       }
     } catch (e) {
-      console.error('Failed to sync transaction to backend DB:', e);
+      // Offline / Cloud mode
     }
   };
 
@@ -136,7 +147,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       await fetch(`${API_BASE_URL}/transactions/${id}`, { method: 'DELETE' });
     } catch (e) {
-      console.error('Failed to delete transaction from backend DB:', e);
+      // Offline / Cloud mode
     }
   };
 
@@ -166,7 +177,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setSavingsGoals(prev => prev.map(g => g.id === tempId ? data : g));
       }
     } catch (e) {
-      console.error('Failed to sync savings goal to backend DB:', e);
+      // Offline / Cloud mode
     }
   };
 
@@ -191,7 +202,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return g;
     }));
 
-    // Record an expense transaction
     const goalObj = savingsGoals.find(g => g.id === goalId);
     const goalTitle = goalObj ? goalObj.title : 'Target Tabungan';
 
@@ -223,7 +233,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         body: JSON.stringify({ amount, notes, userId: user.id })
       });
     } catch (e) {
-      console.error('Failed to sync deposit to backend DB:', e);
+      // Offline / Cloud mode
     }
   };
 
@@ -233,7 +243,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       await fetch(`${API_BASE_URL}/savings-goals/${goalId}`, { method: 'DELETE' });
     } catch (e) {
-      console.error('Failed to delete goal from backend DB:', e);
+      // Offline / Cloud mode
     }
   };
 
@@ -243,6 +253,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setSavingsGoals([]);
     localStorage.removeItem(txKey);
     localStorage.removeItem(goalsKey);
+    cloudSaveUserData(user.id, [], []);
   };
 
   return (

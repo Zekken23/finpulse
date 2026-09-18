@@ -4,7 +4,8 @@ import {
   PlusCircle, 
   Calendar, 
   RotateCcw,
-  LogOut
+  LogOut,
+  Settings
 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
 import { useAuth } from '../context/AuthContext';
@@ -13,9 +14,10 @@ import type { TimeFilterOption } from '../types/finance';
 interface HeaderProps {
   onOpenAddModal: () => void;
   onOpenSavingsModal: () => void;
+  onOpenProfileModal: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onOpenAddModal }) => {
+export const Header: React.FC<HeaderProps> = ({ onOpenAddModal, onOpenProfileModal }) => {
   const { timeFilter, setTimeFilter, resetToDefaultData } = useFinance();
   const { user, logout } = useAuth();
 
@@ -104,24 +106,31 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAddModal }) => {
               <RotateCcw className="w-4 h-4" />
             </button>
 
-            {/* Professional User Profile Badge (Top Right) */}
+            {/* Professional User Profile Badge (Top Right) - Clickable to open ProfileModal */}
             {user && (
-              <div className="flex items-center gap-2.5 pl-3 border-l border-white/10">
-                <div className="relative">
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-purple-500 via-indigo-500 to-cyan-400 flex items-center justify-center text-white text-xs font-black shadow-neon-purple border-2 border-[#090d16]">
-                    {user.name.charAt(0).toUpperCase()}
+              <div className="flex items-center gap-2 pl-3 border-l border-white/10">
+                <button
+                  onClick={onOpenProfileModal}
+                  className="flex items-center gap-2.5 p-1 rounded-xl hover:bg-white/5 transition-all text-left group"
+                  title="Kelola Akun & Pengaturan Profil"
+                >
+                  <div className="relative">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-purple-500 via-indigo-500 to-cyan-400 flex items-center justify-center text-white text-xs font-black shadow-neon-purple border-2 border-[#090d16] group-hover:scale-105 transition-transform">
+                      {user.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 border-2 border-[#090d16] rounded-full" />
                   </div>
-                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 border-2 border-[#090d16] rounded-full" />
-                </div>
 
-                <div className="hidden sm:block text-left">
-                  <div className="text-xs font-bold text-white leading-tight truncate max-w-[120px]">
-                    {user.name}
+                  <div className="hidden sm:block text-left">
+                    <div className="text-xs font-bold text-white leading-tight truncate max-w-[110px] group-hover:text-purple-300 transition-colors flex items-center gap-1">
+                      <span>{user.name}</span>
+                      <Settings className="w-3 h-3 text-slate-400 opacity-60 group-hover:opacity-100" />
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate max-w-[110px]">
+                      {user.email}
+                    </div>
                   </div>
-                  <div className="text-[10px] text-slate-400 truncate max-w-[120px]">
-                    {user.email}
-                  </div>
-                </div>
+                </button>
 
                 <button
                   onClick={logout}

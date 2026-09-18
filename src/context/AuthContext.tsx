@@ -1,11 +1,19 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { User, LoginCredentials, RegisterCredentials } from '../types/auth';
+import { 
+  cloudFetchUsers, 
+  cloudSaveUser, 
+  cloudUpdateUser, 
+  type StoredUserRecord 
+} from '../services/cloudSync';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   login: (credentials: LoginCredentials) => Promise<{ success: boolean; error?: string }>;
   register: (credentials: RegisterCredentials) => Promise<{ success: boolean; error?: string }>;
+  updateProfile: (newName: string) => Promise<{ success: boolean; error?: string }>;
+  changePassword: (oldPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
 }
 
@@ -35,41 +43,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user]);
 
-  // Local user storage helper
-  const getStoredUsers = (): (User & { passwordHash: string })[] => {
+  // Helper to get users from LocalStorage
+  const getStoredUsers = (): StoredUserRecord[] => {
     const data = localStorage.getItem(LOCAL_USERS_KEY);
     return data ? JSON.parse(data) : [];
   };
 
-  const saveUserToStore = (newUser: User & { passwordHash: string }) => {
-    const users = getStoredUsers();
-    users.push(newUser);
+  const saveUsersToStore = (users: StoredUserRecord[]) => {
     localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
   };
 
-  // Login handler
+  // Login handler (Checks LocalStorage + Cloud Store for HP to Laptop cross-device access)
   const login = async (credentials: LoginCredentials): Promise<{ success: boolean; error?: string }> => {
     const { email, password } = credentials;
 
-    // First try backend API if available
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials)
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data.user);
-        return { success: true };
-      }
-    } catch (e) {
-      // Fallback to local storage auth
-    }
+    // 1. Check local storage users first
+    let users = getStoredUsers();
+    let foundUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
 
-    // Local authentication fallback
-    const users = getStoredUsers();
-    const foundUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    // 2. If not found locally, fetch from Cloud Store (Cross-Device Account Discovery)
+    if (!foundUser) {
+      try {
+        const cloudUsers = await cloudFetchUsers();
+        if (cloudUsers && cloudUsers.length > 0) {
+          // Merge cloud users into local store
+          saveUsersToStore(cloudUsers);
+          users = cloudUsers;
+          foundUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+        }
+      } catch (e) {
+        console.warn('Could not fetch cloud users during login:', e);
+      }
+    }
 
     if (!foundUser) {
       return { success: false, error: 'Email belum terdaftar. Silakan registrasi terlebih dahulu.' };
@@ -90,7 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
-  // Register handler
+  // Register handler (Saves to LocalStorage AND Cloud Store for cross-device sync)
   const register = async (credentials: RegisterCredentials): Promise<{ success: boolean; error?: string }> => {
     const { name, email, password } = credentials;
 
@@ -98,41 +103,86 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Semua kolom wajib diisi.' };
     }
 
-    // Try backend API first
+    // Check both local and cloud users
+    let users = getStoredUsers();
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials)
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data.user);
-        return { success: true };
+      const cloudUsers = await cloudFetchUsers();
+      if (cloudUsers && cloudUsers.length > 0) {
+        users = cloudUsers;
       }
     } catch (e) {
-      // Fallback to local storage auth
+      // Fallback
     }
 
-    // Check existing email
-    const users = getStoredUsers();
     if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
       return { success: false, error: 'Email sudah terdaftar. Silakan login.' };
     }
 
-    const newUser: User = {
+    const newUserRecord: StoredUserRecord = {
       id: `user-${Date.now()}`,
       name,
       email,
+      passwordHash: password,
       createdAt: new Date().toISOString()
     };
 
-    saveUserToStore({
-      ...newUser,
-      passwordHash: password
-    });
+    // Save locally
+    const localUsers = getStoredUsers();
+    localUsers.push(newUserRecord);
+    saveUsersToStore(localUsers);
 
-    setUser(newUser);
+    // Sync to Cloud Store asynchronously
+    cloudSaveUser(newUserRecord);
+
+    const sessionUser: User = {
+      id: newUserRecord.id,
+      name: newUserRecord.name,
+      email: newUserRecord.email,
+      createdAt: newUserRecord.createdAt
+    };
+
+    setUser(sessionUser);
+    return { success: true };
+  };
+
+  // Update Name Profile Handler
+  const updateProfile = async (newName: string): Promise<{ success: boolean; error?: string }> => {
+    if (!user) return { success: false, error: 'Anda belum login.' };
+    if (!newName.trim()) return { success: false, error: 'Nama pengguna tidak boleh kosong.' };
+
+    const updatedUser: User = { ...user, name: newName.trim() };
+    setUser(updatedUser);
+
+    const users = getStoredUsers();
+    const foundIndex = users.findIndex(u => u.id === user.id);
+    if (foundIndex >= 0) {
+      users[foundIndex].name = newName.trim();
+      saveUsersToStore(users);
+      cloudUpdateUser(users[foundIndex]);
+    }
+
+    return { success: true };
+  };
+
+  // Change Password Handler
+  const changePassword = async (oldPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
+    if (!user) return { success: false, error: 'Anda belum login.' };
+    if (!oldPassword || !newPassword) return { success: false, error: 'Semua kolom password wajib diisi.' };
+    if (newPassword.length < 4) return { success: false, error: 'Password baru minimal 4 karakter.' };
+
+    const users = getStoredUsers();
+    const currentUserRecord = users.find(u => u.id === user.id);
+
+    if (currentUserRecord && currentUserRecord.passwordHash !== oldPassword) {
+      return { success: false, error: 'Kata sandi saat ini (old password) tidak sesuai.' };
+    }
+
+    if (currentUserRecord) {
+      currentUserRecord.passwordHash = newPassword;
+      saveUsersToStore(users);
+      cloudUpdateUser(currentUserRecord);
+    }
+
     return { success: true };
   };
 
@@ -147,6 +197,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isAuthenticated: Boolean(user),
       login,
       register,
+      updateProfile,
+      changePassword,
       logout
     }}>
       {children}

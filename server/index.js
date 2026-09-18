@@ -62,6 +62,44 @@ app.post('/api/auth/login', (req, res) => {
   });
 });
 
+app.put('/api/auth/profile', (req, res) => {
+  const { userId, name } = req.body;
+  if (!userId || !name) {
+    return res.status(400).json({ error: 'User ID and name required' });
+  }
+
+  db.run('UPDATE users SET name = ? WHERE id = ?', [name, userId], function(err) {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json({ message: 'Profile updated successfully', name });
+  });
+});
+
+app.put('/api/auth/change-password', (req, res) => {
+  const { userId, oldPassword, newPassword } = req.body;
+  if (!userId || !oldPassword || !newPassword) {
+    return res.status(400).json({ error: 'Missing required password fields' });
+  }
+
+  db.get('SELECT * FROM users WHERE id = ?', [userId], (err, user) => {
+    if (err || !user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.passwordHash !== oldPassword) {
+      return res.status(400).json({ error: 'Kata sandi saat ini salah.' });
+    }
+
+    db.run('UPDATE users SET passwordHash = ? WHERE id = ?', [newPassword, userId], function(updateErr) {
+      if (updateErr) {
+        return res.status(500).json({ error: updateErr.message });
+      }
+      res.json({ message: 'Password updated successfully' });
+    });
+  });
+});
+
 // --- TRANSACTIONS API (USER SCOPED) ---
 
 app.get('/api/transactions', (req, res) => {
