@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Target, Laptop, ShieldCheck, Palmtree, Car, Home, Smartphone, PiggyBank, CheckCircle2 } from 'lucide-react';
+import { X, Target, Laptop, ShieldCheck, Palmtree, Car, Home, Smartphone, PiggyBank, CheckCircle2, Calendar } from 'lucide-react';
 import { useFinance } from '../../context/FinanceContext';
 import { useToast } from '../../context/ToastContext';
 import { formatNumberWithDots, parseDotsToNumber } from '../../utils/formatters';
@@ -16,6 +16,7 @@ export const AddSavingsModal: React.FC<AddSavingsModalProps> = ({ isOpen, onClos
 
   const [title, setTitle] = useState('');
   const [formattedTargetAmount, setFormattedTargetAmount] = useState('');
+  const [useDeadline, setUseDeadline] = useState(false);
   const [targetDate, setTargetDate] = useState('');
   const [iconName, setIconName] = useState('PiggyBank');
   const [colorTheme, setColorTheme] = useState<SavingsGoal['colorTheme']>('purple');
@@ -41,16 +42,13 @@ export const AddSavingsModal: React.FC<AddSavingsModalProps> = ({ isOpen, onClos
       return;
     }
 
-    if (!targetDate) {
-      showToast('❌ Mohon pilih tenggat waktu pencapaian target.', 'error');
-      return;
-    }
+    const finalTargetDate = useDeadline && targetDate ? targetDate : undefined;
 
     try {
       addSavingsGoal({
         title: title.trim(),
         targetAmount: numTarget,
-        targetDate,
+        targetDate: finalTargetDate,
         iconName,
         colorTheme,
         notes: notes.trim() || undefined
@@ -61,6 +59,7 @@ export const AddSavingsModal: React.FC<AddSavingsModalProps> = ({ isOpen, onClos
       // Reset & Close
       setTitle('');
       setFormattedTargetAmount('');
+      setUseDeadline(false);
       setTargetDate('');
       setIconName('PiggyBank');
       setColorTheme('purple');
@@ -153,16 +152,46 @@ export const AddSavingsModal: React.FC<AddSavingsModalProps> = ({ isOpen, onClos
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Tenggat Waktu (Target Date) *
-              </label>
-              <input
-                type="date"
-                required
-                value={targetDate}
-                onChange={(e) => setTargetDate(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl glass-input text-xs text-white"
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-semibold text-slate-300">
+                  Tenggat Waktu (Opsional)
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={useDeadline}
+                    onChange={(e) => setUseDeadline(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded accent-purple-500 cursor-pointer"
+                  />
+                  <span className="text-[11px] text-purple-300 font-medium">Set Tanggal</span>
+                </label>
+              </div>
+
+              {useDeadline ? (
+                <div
+                  className="relative flex items-center cursor-pointer"
+                  onClick={(e) => {
+                    const input = e.currentTarget.querySelector('input');
+                    if (input && 'showPicker' in input) {
+                      try { (input as any).showPicker(); } catch (err) {}
+                    }
+                  }}
+                >
+                  <Calendar className="w-4 h-4 text-purple-400 absolute left-3 pointer-events-none" />
+                  <input
+                    type="date"
+                    required={useDeadline}
+                    value={targetDate}
+                    onChange={(e) => setTargetDate(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl glass-input text-xs text-white [color-scheme:dark] cursor-pointer focus:border-purple-400"
+                  />
+                </div>
+              ) : (
+                <div className="w-full px-3.5 py-2.5 rounded-xl border border-dashed border-white/10 bg-white/5 text-xs text-slate-400 flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-slate-500" />
+                  <span>Tanpa Deadline (Santai / Fleksibel)</span>
+                </div>
+              )}
             </div>
           </div>
 

@@ -38,7 +38,7 @@ export interface SavingsGoal {
   title: string;
   targetAmount: number;
   currentAmount: number;
-  targetDate: string; // YYYY-MM-DD
+  targetDate?: string; // YYYY-MM-DD (optional)
   iconName: string;
   colorTheme: 'purple' | 'cyan' | 'emerald' | 'amber' | 'rose';
   notes?: string;

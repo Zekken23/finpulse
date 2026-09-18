@@ -78,7 +78,7 @@ export default async function handler(req, res) {
       const { userId: reqUserId, title, targetAmount, targetDate, iconName, colorTheme, notes } = req.body || {};
       const activeUser = reqUserId || userId;
 
-      if (!activeUser || !title || !targetAmount || !targetDate) {
+      if (!activeUser || !title || !targetAmount) {
         return res.status(400).json({ error: 'Missing required fields' });
       }
 
@@ -88,7 +88,7 @@ export default async function handler(req, res) {
         title,
         targetAmount: Number(targetAmount),
         currentAmount: 0,
-        targetDate,
+        targetDate: targetDate || null,
         iconName: iconName || 'PiggyBank',
         colorTheme: colorTheme || 'purple',
         notes: notes || null,

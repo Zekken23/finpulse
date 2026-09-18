@@ -26,9 +26,10 @@ export const parseDotsToNumber = (val: string): number => {
 };
 
 // Format Date string to readable Indonesian date
-export const formatDateID = (dateStr: string): string => {
-  if (!dateStr) return '';
+export const formatDateID = (dateStr?: string | null): string => {
+  if (!dateStr) return 'Tanpa Deadline';
   const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return 'Tanpa Deadline';
   return new Intl.DateTimeFormat('id-ID', {
     day: 'numeric',
     month: 'short',
