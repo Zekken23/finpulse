@@ -9,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 7860; // Default Hugging Face Spaces port is 7860
+const PORT = process.env.PORT || 7860;
 
 app.use(cors());
 app.use(express.json());
@@ -17,10 +17,66 @@ app.use(express.json());
 // Initialize SQLite Database
 initDB();
 
-// --- TRANSACTIONS API ---
+// --- AUTH API ---
+
+app.post('/api/auth/register', (req, res) => {
+  const { name, email, password } = req.body;
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+
+  const id = `user-${Date.now()}`;
+  const sql = `INSERT INTO users (id, name, email, passwordHash) VALUES (?, ?, ?, ?)`;
+
+  db.run(sql, [id, name, email.toLowerCase(), password], function(err) {
+    if (err) {
+      if (err.message.includes('UNIQUE constraint failed')) {
+        return res.status(400).json({ error: 'Email sudah terdaftar. Silakan login.' });
+      }
+      return res.status(500).json({ error: err.message });
+    }
+
+    const user = { id, name, email, createdAt: new Date().toISOString() };
+    res.status(201).json({ message: 'User registered successfully', user });
+  });
+});
+
+app.post('/api/auth/login', (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password required' });
+  }
+
+  const sql = `SELECT * FROM users WHERE email = ?`;
+  db.get(sql, [email.toLowerCase()], (err, user) => {
+    if (err || !user) {
+      return res.status(400).json({ error: 'Email belum terdaftar.' });
+    }
+
+    if (user.passwordHash !== password) {
+      return res.status(400).json({ error: 'Password yang Anda masukkan salah.' });
+    }
+
+    const sessionUser = { id: user.id, name: user.name, email: user.email, createdAt: user.createdAt };
+    res.json({ message: 'Login successful', user: sessionUser });
+  });
+});
+
+// --- TRANSACTIONS API (USER SCOPED) ---
 
 app.get('/api/transactions', (req, res) => {
-  db.all('SELECT * FROM transactions ORDER BY date DESC, createdAt DESC', [], (err, rows) => {
+  const { userId } = req.query;
+  let sql = 'SELECT * FROM transactions';
+  const params = [];
+
+  if (userId) {
+    sql += ' WHERE userId = ?';
+    params.push(userId);
+  }
+
+  sql += ' ORDER BY date DESC, createdAt DESC';
+
+  db.all(sql, params, (err, rows) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -29,23 +85,24 @@ app.get('/api/transactions', (req, res) => {
 });
 
 app.post('/api/transactions', (req, res) => {
-  const { title, amount, type, category, date, notes, linkedSavingsGoalId } = req.body;
-  if (!title || !amount || !type || !category || !date) {
+  const { userId, title, amount, type, category, date, notes, linkedSavingsGoalId } = req.body;
+  if (!userId || !title || !amount || !type || !category || !date) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
   const id = `tx-${Date.now()}`;
   const sql = `
-    INSERT INTO transactions (id, title, amount, type, category, date, notes, linkedSavingsGoalId)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO transactions (id, userId, title, amount, type, category, date, notes, linkedSavingsGoalId)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
-  db.run(sql, [id, title, amount, type, category, date, notes || null, linkedSavingsGoalId || null], function(err) {
+  db.run(sql, [id, userId, title, amount, type, category, date, notes || null, linkedSavingsGoalId || null], function(err) {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
     res.status(201).json({
       id,
+      userId,
       title,
       amount,
       type,
@@ -67,10 +124,21 @@ app.delete('/api/transactions/:id', (req, res) => {
   });
 });
 
-// --- SAVINGS GOALS API ---
+// --- SAVINGS GOALS API (USER SCOPED) ---
 
 app.get('/api/savings-goals', (req, res) => {
-  db.all('SELECT * FROM savings_goals ORDER BY createdAt ASC', [], (err, rows) => {
+  const { userId } = req.query;
+  let sql = 'SELECT * FROM savings_goals';
+  const params = [];
+
+  if (userId) {
+    sql += ' WHERE userId = ?';
+    params.push(userId);
+  }
+
+  sql += ' ORDER BY createdAt ASC';
+
+  db.all(sql, params, (err, rows) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
@@ -83,23 +151,24 @@ app.get('/api/savings-goals', (req, res) => {
 });
 
 app.post('/api/savings-goals', (req, res) => {
-  const { title, targetAmount, targetDate, iconName, colorTheme, notes } = req.body;
-  if (!title || !targetAmount || !targetDate) {
+  const { userId, title, targetAmount, targetDate, iconName, colorTheme, notes } = req.body;
+  if (!userId || !title || !targetAmount || !targetDate) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
   const id = `goal-${Date.now()}`;
   const sql = `
-    INSERT INTO savings_goals (id, title, targetAmount, currentAmount, targetDate, iconName, colorTheme, notes, isCompleted)
-    VALUES (?, ?, ?, 0, ?, ?, ?, ?, 0)
+    INSERT INTO savings_goals (id, userId, title, targetAmount, currentAmount, targetDate, iconName, colorTheme, notes, isCompleted)
+    VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, 0)
   `;
 
-  db.run(sql, [id, title, targetAmount, targetDate, iconName || 'PiggyBank', colorTheme || 'purple', notes || null], function(err) {
+  db.run(sql, [id, userId, title, targetAmount, targetDate, iconName || 'PiggyBank', colorTheme || 'purple', notes || null], function(err) {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
     res.status(201).json({
       id,
+      userId,
       title,
       targetAmount,
       currentAmount: 0,
@@ -114,7 +183,7 @@ app.post('/api/savings-goals', (req, res) => {
 
 app.post('/api/savings-goals/:id/deposit', (req, res) => {
   const { id } = req.params;
-  const { amount, notes } = req.body;
+  const { userId, amount, notes } = req.body;
   if (!amount || amount <= 0) {
     return res.status(400).json({ error: 'Invalid deposit amount' });
   }
@@ -134,14 +203,14 @@ app.post('/api/savings-goals/:id/deposit', (req, res) => {
 
       const txId = `tx-${Date.now()}`;
       const txSql = `
-        INSERT INTO transactions (id, title, amount, type, category, date, notes, linkedSavingsGoalId)
-        VALUES (?, ?, ?, 'expense', 'Lainnya', ?, ?, ?)
+        INSERT INTO transactions (id, userId, title, amount, type, category, date, notes, linkedSavingsGoalId)
+        VALUES (?, ?, ?, ?, 'expense', 'Lainnya', ?, ?, ?)
       `;
       const dateStr = new Date().toISOString().split('T')[0];
       const txTitle = `Setor Tabungan: ${goal.title}`;
       const txNotes = notes || `Setoran untuk target ${goal.title}`;
 
-      db.run(txSql, [txId, txTitle, amount, dateStr, txNotes, id], (txErr) => {
+      db.run(txSql, [txId, userId || goal.userId, txTitle, amount, dateStr, txNotes, id], (txErr) => {
         if (txErr) {
           console.error('Failed to create deposit transaction record:', txErr.message);
         }
@@ -168,12 +237,12 @@ app.delete('/api/savings-goals/:id', (req, res) => {
 });
 
 app.post('/api/reset', (req, res) => {
-  db.serialize(() => {
-    db.run('DELETE FROM transactions');
-    db.run('DELETE FROM savings_goals');
-    initDB();
-    res.json({ message: 'Database reset to default seed data successfully' });
-  });
+  const { userId } = req.body;
+  if (userId) {
+    db.run('DELETE FROM transactions WHERE userId = ?', [userId]);
+    db.run('DELETE FROM savings_goals WHERE userId = ?', [userId]);
+  }
+  res.json({ message: 'User data cleared successfully' });
 });
 
 // --- SERVE FRONTEND STATIC FILES IN PRODUCTION ---

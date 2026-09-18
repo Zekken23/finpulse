@@ -22,6 +22,7 @@ export type TransactionCategory = ExpenseCategory | IncomeCategory;
 
 export interface Transaction {
   id: string;
+  userId?: string;
   title: string;
   amount: number;
   type: TransactionType;
@@ -33,6 +34,7 @@ export interface Transaction {
 
 export interface SavingsGoal {
   id: string;
+  userId?: string;
   title: string;
   targetAmount: number;
   currentAmount: number;

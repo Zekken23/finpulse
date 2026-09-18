@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { FinanceProvider } from './context/FinanceContext';
 import { Header } from './components/Header';
 import { OverviewCards } from './components/OverviewCards';
@@ -10,16 +11,20 @@ import { TransactionListSection } from './components/Transactions/TransactionLis
 import { TransactionModal } from './components/Transactions/TransactionModal';
 import { AddSavingsModal } from './components/Savings/AddSavingsModal';
 import { DepositModal } from './components/Savings/DepositModal';
+import { AuthModal } from './components/Auth/AuthModal';
 import type { SavingsGoal } from './types/finance';
 import { Wallet } from 'lucide-react';
 
 const MainContent: React.FC = () => {
+  const { isAuthenticated } = useAuth();
   const [isAddTxModalOpen, setIsAddTxModalOpen] = useState(false);
   const [isAddSavingsModalOpen, setIsAddSavingsModalOpen] = useState(false);
   const [selectedGoalForDeposit, setSelectedGoalForDeposit] = useState<SavingsGoal | null>(null);
 
   return (
     <div className="min-h-screen flex flex-col justify-between">
+      {!isAuthenticated && <AuthModal />}
+
       <div>
         {/* Navigation Header */}
         <Header
@@ -95,9 +100,11 @@ const MainContent: React.FC = () => {
 
 export function App() {
   return (
-    <FinanceProvider>
-      <MainContent />
-    </FinanceProvider>
+    <AuthProvider>
+      <FinanceProvider>
+        <MainContent />
+      </FinanceProvider>
+    </AuthProvider>
   );
 }
 

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { Transaction, SavingsGoal, TimeFilterOption, FinancialStats } from '../types/finance';
-import { INITIAL_TRANSACTIONS, INITIAL_SAVINGS_GOALS } from '../data/mockData';
 import { calculateFinancialStats, triggerConfetti } from '../utils/formatters';
+import { useAuth } from './AuthContext';
 
 const API_BASE_URL = '/api';
 
@@ -28,46 +28,85 @@ interface FinanceContextType {
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined);
 
 export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
-  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>(INITIAL_SAVINGS_GOALS);
+  const { user } = useAuth();
+
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [isBackendConnected, setIsBackendConnected] = useState<boolean>(false);
 
   const [timeFilter, setTimeFilter] = useState<TimeFilterOption>('this_month');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
-  // Fetch initial data from Backend REST API (SQLite)
-  const fetchBackendData = async () => {
-    try {
-      const [txRes, goalsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/transactions`),
-        fetch(`${API_BASE_URL}/savings-goals`)
-      ]);
+  // Keys for user specific LocalStorage
+  const txKey = user ? `finpulse_tx_${user.id}` : 'finpulse_tx_guest';
+  const goalsKey = user ? `finpulse_goals_${user.id}` : 'finpulse_goals_guest';
 
-      if (txRes.ok && goalsRes.ok) {
-        const txData = await txRes.json();
-        const goalsData = await goalsRes.json();
-        setTransactions(txData);
-        setSavingsGoals(goalsData);
-        setIsBackendConnected(true);
-      }
-    } catch (error) {
-      console.warn('Backend server unreachable, operating in local fallback mode:', error);
-      setIsBackendConnected(false);
+  // Load user data on change of active user
+  useEffect(() => {
+    if (!user) {
+      setTransactions([]);
+      setSavingsGoals([]);
+      return;
     }
-  };
+
+    const fetchUserData = async () => {
+      // 1. Try Backend API first if user exists
+      try {
+        const [txRes, goalsRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/transactions?userId=${user.id}`),
+          fetch(`${API_BASE_URL}/savings-goals?userId=${user.id}`)
+        ]);
+
+        if (txRes.ok && goalsRes.ok) {
+          const txData = await txRes.json();
+          const goalsData = await goalsRes.json();
+          setTransactions(txData);
+          setSavingsGoals(goalsData);
+          setIsBackendConnected(true);
+          return;
+        }
+      } catch (error) {
+        setIsBackendConnected(false);
+      }
+
+      // 2. Fallback to LocalStorage for this specific userId
+      const savedTx = localStorage.getItem(txKey);
+      const savedGoals = localStorage.getItem(goalsKey);
+
+      setTransactions(savedTx ? JSON.parse(savedTx) : []);
+      setSavingsGoals(savedGoals ? JSON.parse(savedGoals) : []);
+    };
+
+    fetchUserData();
+  }, [user, txKey, goalsKey]);
+
+  // Sync to LocalStorage
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem(txKey, JSON.stringify(transactions));
+    }
+  }, [transactions, user, txKey]);
 
   useEffect(() => {
-    fetchBackendData();
-  }, []);
+    if (user) {
+      localStorage.setItem(goalsKey, JSON.stringify(savingsGoals));
+    }
+  }, [savingsGoals, user, goalsKey]);
 
   // Derived Financial Stats
   const stats = calculateFinancialStats(transactions, savingsGoals, timeFilter);
 
   // Transaction Handlers
   const addTransaction = async (txData: Omit<Transaction, 'id'>) => {
+    if (!user) return;
+
     const tempId = `tx-${Date.now()}`;
-    const newTx: Transaction = { ...txData, id: tempId };
+    const newTx: Transaction = {
+      ...txData,
+      id: tempId,
+      userId: user.id
+    };
 
     // Optimistic UI update
     setTransactions(prev => [newTx, ...prev]);
@@ -76,10 +115,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const res = await fetch(`${API_BASE_URL}/transactions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(txData)
+        body: JSON.stringify({ ...txData, userId: user.id })
       });
       if (res.ok) {
-        fetchBackendData();
+        const data = await res.json();
+        setTransactions(prev => prev.map(t => t.id === tempId ? data : t));
       }
     } catch (e) {
       console.error('Failed to sync transaction to backend DB:', e);
@@ -102,10 +142,13 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Savings Goal Handlers
   const addSavingsGoal = async (goalData: Omit<SavingsGoal, 'id' | 'currentAmount' | 'isCompleted'>) => {
+    if (!user) return;
+
     const tempId = `goal-${Date.now()}`;
     const newGoal: SavingsGoal = {
       ...goalData,
       id: tempId,
+      userId: user.id,
       currentAmount: 0,
       isCompleted: false
     };
@@ -116,10 +159,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const res = await fetch(`${API_BASE_URL}/savings-goals`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(goalData)
+        body: JSON.stringify({ ...goalData, userId: user.id })
       });
       if (res.ok) {
-        fetchBackendData();
+        const data = await res.json();
+        setSavingsGoals(prev => prev.map(g => g.id === tempId ? data : g));
       }
     } catch (e) {
       console.error('Failed to sync savings goal to backend DB:', e);
@@ -127,7 +171,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const depositToSavingsGoal = async (goalId: string, amount: number, notes?: string) => {
-    if (amount <= 0) return;
+    if (amount <= 0 || !user) return;
 
     let targetAchieved = false;
 
@@ -153,6 +197,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const depositTx: Transaction = {
       id: `tx-${Date.now()}`,
+      userId: user.id,
       title: `Setor Tabungan: ${goalTitle}`,
       amount: amount,
       type: 'expense',
@@ -175,9 +220,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       await fetch(`${API_BASE_URL}/savings-goals/${goalId}/deposit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, notes })
+        body: JSON.stringify({ amount, notes, userId: user.id })
       });
-      fetchBackendData();
     } catch (e) {
       console.error('Failed to sync deposit to backend DB:', e);
     }
@@ -194,15 +238,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const resetToDefaultData = async () => {
-    setTransactions(INITIAL_TRANSACTIONS);
-    setSavingsGoals(INITIAL_SAVINGS_GOALS);
-
-    try {
-      await fetch(`${API_BASE_URL}/reset`, { method: 'POST' });
-      fetchBackendData();
-    } catch (e) {
-      console.error('Failed to reset backend DB:', e);
-    }
+    if (!user) return;
+    setTransactions([]);
+    setSavingsGoals([]);
+    localStorage.removeItem(txKey);
+    localStorage.removeItem(goalsKey);
   };
 
   return (

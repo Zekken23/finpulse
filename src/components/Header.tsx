@@ -4,9 +4,11 @@ import {
   PlusCircle, 
   Calendar, 
   RotateCcw,
-  Target
+  Target,
+  LogOut
 } from 'lucide-react';
 import { useFinance } from '../context/FinanceContext';
+import { useAuth } from '../context/AuthContext';
 import type { TimeFilterOption } from '../types/finance';
 
 interface HeaderProps {
@@ -16,9 +18,10 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onOpenAddModal, onOpenSavingsModal }) => {
   const { timeFilter, setTimeFilter, resetToDefaultData } = useFinance();
+  const { user, logout } = useAuth();
 
   const handleReset = () => {
-    if (window.confirm('Apakah Anda yakin ingin mengembalikan data ke sampel awal?')) {
+    if (window.confirm('Apakah Anda yakin ingin mengosongkan seluruh data transaksi Anda?')) {
       resetToDefaultData();
     }
   };
@@ -64,8 +67,29 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAddModal, onOpenSavingsMod
             </div>
           </div>
 
-          {/* Time Filter Pills & Actions */}
+          {/* Time Filter Pills & User Profile Actions */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            
+            {/* User Profile Badge & Logout */}
+            {user && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-purple-950/40 border border-purple-500/30">
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-purple-500 to-cyan-400 flex items-center justify-center text-white text-xs font-black">
+                  {user.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="hidden sm:block text-left">
+                  <div className="text-xs font-bold text-white line-clamp-1">{user.name}</div>
+                  <div className="text-[10px] text-slate-400 truncate max-w-[120px]">{user.email}</div>
+                </div>
+                <button
+                  onClick={logout}
+                  title="Keluar dari akun (Logout)"
+                  className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors ml-1"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             {/* Period selector */}
             <div className="flex items-center p-1 rounded-xl bg-slate-900/80 border border-white/10 glass-panel">
               {periodButtons.map((btn) => (
@@ -103,7 +127,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAddModal, onOpenSavingsMod
 
               <button
                 onClick={handleReset}
-                title="Reset ke Sampel Data Awal"
+                title="Kosongkan Data Transaksi"
                 className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors border border-transparent hover:border-white/10"
               >
                 <RotateCcw className="w-4 h-4" />
