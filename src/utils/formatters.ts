@@ -52,7 +52,7 @@ export const isSameWeek = (d1: Date, d2: Date) => {
   const startOfWeek = (date: Date) => {
     const d = new Date(date);
     const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     return new Date(d.setDate(diff));
   };
 
@@ -99,7 +99,7 @@ export const filterTransactionsByPeriod = (
   });
 };
 
-// Calculate Overall & Period Financial Statistics
+// Calculate Overall & Period Financial Statistics (Real-Time)
 export const calculateFinancialStats = (
   transactions: Transaction[],
   savingsGoals: SavingsGoal[],
@@ -139,14 +139,38 @@ export const calculateFinancialStats = (
 
   const dailyAverageExpense = Math.round(periodExpense / daysInPeriod);
 
+  // Low Balance Calculation (<25% of period income remaining)
+  let isLowBalanceWarning = false;
+  let lowBalancePercentage = 100;
+  let lowBalanceMessage = '';
+
+  if (periodIncome > 0) {
+    const remainingRatio = Math.round(((periodIncome - periodExpense) / periodIncome) * 100);
+    lowBalancePercentage = Math.max(0, remainingRatio);
+
+    if (remainingRatio < 25) {
+      isLowBalanceWarning = true;
+      lowBalanceMessage = `⚠️ Peringatan: Sisa uang periode ini tersisa ${lowBalancePercentage}% (kurang dari 25%)! Harap batasi pengeluaran Anda.`;
+    }
+  } else if (periodExpense > 0) {
+    isLowBalanceWarning = true;
+    lowBalancePercentage = 0;
+    lowBalanceMessage = '⚠️ Peringatan: Belum ada pemasukan recorded, sedangkan pengeluaran sudah berjalan!';
+  }
+
+  // Health Score Calculation (0-100)
   let healthScore = 75;
   let healthStatus: FinancialStats['healthStatus'] = 'Healthy';
   let healthRecommendation = 'Keuangan Anda dalam kondisi cukup stabil.';
 
   if (periodIncome === 0 && periodExpense > 0) {
-    healthScore = 35;
+    healthScore = 30;
     healthStatus = 'Warning';
     healthRecommendation = 'Belum ada pemasukan yang tercatat di periode ini. Hemat pengeluaran harian Anda!';
+  } else if (isLowBalanceWarning) {
+    healthScore = 45;
+    healthStatus = 'Caution';
+    healthRecommendation = 'Sisa uang di bawah 25%! Tahan pengeluaran untuk kebutuhan non-esensial.';
   } else if (savingsRate >= 40) {
     healthScore = 95;
     healthStatus = 'Excelent';
@@ -175,7 +199,10 @@ export const calculateFinancialStats = (
     dailyAverageExpense,
     healthScore,
     healthStatus,
-    healthRecommendation
+    healthRecommendation,
+    isLowBalanceWarning,
+    lowBalancePercentage,
+    lowBalanceMessage
   };
 };
 

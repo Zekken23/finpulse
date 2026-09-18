@@ -58,6 +58,9 @@ export interface FinancialStats {
   healthScore: number; // 0 - 100
   healthStatus: 'Excelent' | 'Healthy' | 'Caution' | 'Warning';
   healthRecommendation: string;
+  isLowBalanceWarning: boolean;
+  lowBalancePercentage: number;
+  lowBalanceMessage: string;
 }
 
 export interface CategorySummary {
