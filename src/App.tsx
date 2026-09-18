@@ -89,8 +89,10 @@ const MainContent: React.FC = () => {
             <span className="font-bold text-white">FinPulse</span>
             <span>— Pengatur Keuangan & Target Tabungan Interaktif</span>
           </div>
-          <div className="flex items-center gap-1 text-slate-500">
-            <span>Didesain khusus untuk pencatatan harian, mingguan, & bulanan.</span>
+          <div className="flex items-center gap-2 text-slate-400">
+            <span className="px-2.5 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 font-semibold flex items-center gap-1 text-[11px]">
+              ✨ This apps made by yusron
+            </span>
           </div>
         </div>
       </footer>
