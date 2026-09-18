@@ -1,0 +1,19 @@
+{
+  "name": "finpulse-backend",
+  "version": "1.0.0",
+  "description": "Backend SQLite REST API for FinPulse Financial Manager",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
