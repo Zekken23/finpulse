@@ -3,6 +3,14 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
+    { "source": "/api/auth/register", "destination": "/api/auth.js?action=register" },
+    { "source": "/api/auth/login", "destination": "/api/auth.js?action=login" },
+    { "source": "/api/auth/profile", "destination": "/api/auth.js?action=profile" },
+    { "source": "/api/auth/change-password", "destination": "/api/auth.js?action=change-password" },
+    { "source": "/api/savings-goals/deposit", "destination": "/api/savings-goals.js?action=deposit" },
+    { "source": "/api/transactions", "destination": "/api/transactions.js" },
+    { "source": "/api/savings-goals", "destination": "/api/savings-goals.js" },
+    { "source": "/api/reset", "destination": "/api/reset.js" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
